@@ -253,17 +253,8 @@ python launcher.py
 python _build_helper.py build_exe
 ```
 
-## Что важно учитывать
-
-- Лаунчер рассчитан прежде всего на Windows и WebView2/EdgeChromium.
-- Self-update не срабатывает в режиме запуска из исходников.
-- Если backend auth-сервер меняет домен или путь, это нужно отразить в `AINOCRAFT_AUTH_BASE_URL` или в `config/constants.py`.
-- Для production-сборки желательно распространять вместе с проверенным `authlib-injector` jar и доступным Java runtime.
-
 ## Связанные части проекта
 
 - `AiNoCraft_back` - authserver, игровые endpoint'ы и storage/backend API.
 - `AiNoCraft_front` - сайт, личный кабинет, новости и витрина лаунчера.
 - `AiNoCraft_dep` - reverse proxy и production-инфраструктура для доменов проекта.
-
-Если нужно, из этого README уже можно собрать и отдельную пользовательскую инструкцию для игроков: установка, первый логин, скачивание сборки и типовые проблемы Java/auth.
