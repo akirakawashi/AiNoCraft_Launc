@@ -22,22 +22,22 @@
 
 ## Обзор
 
-AiNoCraft Launcher - это десктопный лаунчер проекта AiNoCraft на Python + PyWebView. Он использует встроенный HTML/CSS/JS интерфейс, а Python-слой отвечает за авторизацию, хранение сессии, скачивание игровых сборок, проверку обновлений лаунчера и запуск Minecraft c `authlib-injector`.
+AiNoCraft Launcher — десктопный лаунчер проекта AiNoCraft на Python + PyWebView. Интерфейс собран на встроенном HTML/CSS/JS, а Python-слой берёт на себя авторизацию, хранение сессии, скачивание игровых сборок, проверку обновлений лаунчера и запуск Minecraft c `authlib-injector`.
 
-Проект рассчитан в первую очередь на Windows: использует `edgechromium` в `pywebview`, хранит чувствительные токены через Windows DPAPI и запускает игру через `javaw.exe`.
+Проект в первую очередь рассчитан на Windows: он использует `edgechromium` в `pywebview`, хранит чувствительные токены через Windows DPAPI и запускает игру через `javaw.exe`.
 
 ## Что умеет лаунчер
 
-- Показывать нативное desktop-окно с web-интерфейсом на `pywebview`.
-- Выполнять логин через `/minecraft-server-api/authserver/authenticate`.
-- Сохранять access/refresh session локально и восстанавливать её между перезапусками.
-- Шифровать чувствительные данные сессии через Windows DPAPI.
-- Поддерживать несколько игровых сборок из `build_profiles.json`.
-- Скачивать ZIP-сборки, отслеживать прогресс и распаковывать их в отдельные instance-папки.
-- Автоматически подбирать подходящую Java runtime по требованиям Minecraft version JSON.
-- Запускать Minecraft с `authlib-injector` и токенами пользователя.
-- Проверять новую версию лаунчера и выполнять self-update в собранной `.exe` версии.
-- Открывать разрешённые внешние ссылки на регистрацию и сброс пароля.
+- показывает нативное desktop-окно с web-интерфейсом на `pywebview`;
+- выполняет логин через `/minecraft-server-api/authserver/authenticate`;
+- сохраняет access/refresh session локально и восстанавливает её между перезапусками;
+- шифрует чувствительные данные сессии через Windows DPAPI;
+- поддерживает несколько игровых сборок из `build_profiles.json`;
+- скачивает ZIP-сборки, показывает прогресс и распаковывает их в отдельные instance-папки;
+- автоматически подбирает Java runtime по требованиям Minecraft version JSON;
+- запускает Minecraft с `authlib-injector` и токенами пользователя;
+- проверяет новую версию лаунчера и выполняет self-update в собранной `.exe` версии;
+- открывает разрешённые внешние ссылки на регистрацию и сброс пароля.
 
 ## Архитектура
 
@@ -82,14 +82,14 @@ flowchart LR
 | `magic` | `AiNoCraftMagic` | `Magic` | `https://storage.ainocraft.com/downloads/AiNoCraftMagic.zip` |
 | `sky` | `AiNoCraftSky` | `Sky` | `https://storage.ainocraft.com/downloads/AiNoCraftSky.zip` |
 
-Каждая сборка ставится в отдельную директорию вида `%APPDATA%\AiNoCraftTech` и имеет собственный `launcher_settings.json`.
+Каждая сборка ставится в отдельную директорию вида `%APPDATA%\AiNoCraftTech` и хранит собственный `launcher_settings.json`.
 
 ## Быстрый старт
 
 ### Вариант 1. Запуск из исходников
 
 1. Установите Python `3.11`.
-2. Установите зависимости любым удобным способом.
+2. Установите зависимости удобным способом.
 
 Через PDM:
 
@@ -109,7 +109,7 @@ python -m pip install pywebview requests pyinstaller
 python launcher.py
 ```
 
-> При запуске из исходников self-update отключён специально, чтобы не повредить `launcher.py` или рабочую директорию разработчика.
+> При запуске из исходников self-update отключён специально: так он не тронет `launcher.py` и рабочую директорию разработчика.
 
 ### Вариант 2. Переключение auth-сервера
 
@@ -146,13 +146,13 @@ python launcher.py
 
 ### Вариант 3. Сборка `.exe`
 
-Версия читается из `version.json`, а packaging идёт через `launcher.spec`.
+Версия читается из `version.json`, packaging идёт через `launcher.spec`.
 
 ```bash
 python _build_helper.py build_exe
 ```
 
-После сборки PyInstaller формирует desktop-бинарь, для которого уже доступен self-update.
+После сборки PyInstaller создаёт desktop-бинарь. Для него self-update уже доступен.
 
 ## Как работает self-update
 
@@ -164,7 +164,7 @@ python _build_helper.py build_exe
 | 4 | detached PowerShell helper ждёт завершения процесса лаунчера |
 | 5 | старый бинарь заменяется новой версией и лаунчер запускается снова |
 
-Self-update работает только для собранного `.exe` и намеренно отключён при source-run.
+Self-update работает только в собранном `.exe` и намеренно отключён при source-run.
 
 ## Переменные окружения
 
@@ -255,6 +255,6 @@ python _build_helper.py build_exe
 
 ## Связанные части проекта
 
-- `AiNoCraft_back` - authserver, игровые endpoint'ы и storage/backend API.
-- `AiNoCraft_front` - сайт, личный кабинет, новости и витрина лаунчера.
-- `AiNoCraft_dep` - reverse proxy и production-инфраструктура для доменов проекта.
+- `AiNoCraft_back` — authserver, игровые endpoint'ы и storage/backend API.
+- `AiNoCraft_front` — сайт, личный кабинет, новости и витрина лаунчера.
+- `AiNoCraft_dep` — reverse proxy и production-инфраструктура для доменов проекта.
