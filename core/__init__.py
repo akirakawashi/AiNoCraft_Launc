@@ -1,0 +1,1 @@
+# core пакет лаунчера AiNoCraft
