@@ -1,13 +1,9 @@
-"""
-Self-update module for the Windows launcher executable.
+"""Optional self-update support for direct .exe launches.
 
-Update flow:
-  1. check_for_update() reads remote version.json and compares versions.
-  2. start_update() downloads a new executable in background.
-  3. A detached PowerShell helper waits for current PID to exit,
-     replaces the executable, starts new version, and exits.
-
-No .bat/.vbs files are created.
+The production update path is the external bootstrapper, which consumes
+``https://storage.ainocraft.com/launcher/stable/manifest.json`` before this
+launcher starts. This module is therefore disabled by default and can be
+enabled with ``AINOCRAFT_LAUNCHER_SELF_UPDATE=1`` for direct .exe installs.
 """
 
 from __future__ import annotations
@@ -20,90 +16,74 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
 from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urljoin
 
-import requests
+from config import (
+    DOWNLOAD_CHUNK_SIZE,
+    DOWNLOAD_PROGRESS_INTERVAL_SEC,
+    DOWNLOAD_TIMEOUT_SEC,
+    LAUNCHER_MANIFEST_URL,
+    LAUNCHER_UPDATE_ENABLED,
+    LAUNCHER_VERSION,
+    USER_AGENT,
+    is_download_url_allowed,
+)
+from core.enums import UpdateState
+from core.stream_download import DownloadProgress, download_to_file
+from core.win_env import sanitize_child_env
 
-from config import DOWNLOAD_CHUNK_SIZE, DOWNLOAD_TIMEOUT_SEC, LAUNCHER_UPDATE_URL, LAUNCHER_VERSION
 
-#  State machine
+@dataclass(slots=True)
+class UpdateStatus:
+    state: UpdateState = UpdateState.IDLE
+    active: bool = False
+    percent: float = 0.0
+    downloaded_mb: float = 0.0
+    total_mb: float = 0.0
+    speed_mb: float = 0.0
+    remote_version: str | None = None
+    error: str | None = None
 
-STATE_IDLE = "idle"
-STATE_CHECKING = "checking"
-STATE_AVAILABLE = "available"
-STATE_UP_TO_DATE = "up_to_date"
-STATE_DOWNLOADING = "downloading"
-STATE_APPLYING = "applying"
-STATE_DONE = "done"
-STATE_ERROR = "error"
-STATE_DISABLED = "disabled"
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["state"] = self.state.value
+        return payload
+
 
 _lock = threading.Lock()
 _thread: threading.Thread | None = None
-_shutdown_callback: "Callable[[], None] | None" = None
+_shutdown_callback: Callable[[], None] | None = None
+_state = UpdateStatus()
 
 
-def register_shutdown(cb: "Callable[[], None]") -> None:
-    """Register window shutdown callback (e.g. window.destroy)."""
+def register_shutdown(callback: Callable[[], None]) -> None:
     global _shutdown_callback
-    _shutdown_callback = cb
-
-
-def _initial_state() -> dict[str, Any]:
-    return {
-        "state": STATE_IDLE,
-        "active": False,
-        "percent": 0.0,
-        "downloaded_mb": 0.0,
-        "total_mb": 0.0,
-        "speed_mb": 0.0,
-        "remote_version": None,
-        "error": None,
-    }
-
-
-_state: dict[str, Any] = _initial_state()
+    _shutdown_callback = callback
 
 
 def _update(**kwargs: Any) -> None:
     with _lock:
-        _state.update(kwargs)
+        for key, value in kwargs.items():
+            setattr(_state, key, value)
 
 
 def get_status() -> dict[str, Any]:
     with _lock:
-        return dict(_state)
+        return _state.to_dict()
 
-
-#  Version helpers
-
-def _parse_version(v: str) -> tuple[int, ...]:
-    parts = []
-    for p in v.strip().split("."):
-        try:
-            parts.append(int(p))
-        except ValueError:
-            parts.append(0)
-    return tuple(parts)
-
-
-def _is_newer(remote: str, current: str) -> bool:
-    return _parse_version(remote) > _parse_version(current)
-
-
-#  Current executable helpers
 
 def _current_exe() -> Path:
-    """Path to the running entrypoint."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve()
     return Path(sys.argv[0]).resolve()
 
 
 def _is_frozen_exe() -> bool:
-    """True only for packaged Windows .exe builds."""
     exe = _current_exe()
     return bool(getattr(sys, "frozen", False)) and exe.suffix.lower() == ".exe"
 
@@ -117,124 +97,128 @@ def _safe_unlink(path: Path) -> None:
 
 
 def _update_tmp_path() -> Path:
-    """Temporary path used to download the update (in system %TEMP%, not next to launcher)."""
     return Path(tempfile.gettempdir()) / "AiNoCraftLauncher_update.exe"
 
 
 def startup_cleanup() -> None:
-    """
-    Remove leftovers from previous updates.
-    Call once at startup before UI.
-    """
     exe = _current_exe()
     _safe_unlink(exe.with_suffix(".exe.old"))
-    # Legacy path (next to exe) — clean up just in case.
-    _safe_unlink(exe.parent / "_ainocraft_update_new.exe")
-    # Current temp path.
     _safe_unlink(_update_tmp_path())
 
 
+def _is_same_version(remote_version: str) -> bool:
+    current = str(LAUNCHER_VERSION or "").strip()
+    remote = str(remote_version or "").strip()
+    return bool(current and remote and current == remote)
+
+
+def _ensure_url_dir(url: str) -> str:
+    return url if url.endswith("/") else url + "/"
+
+
+def _manifest_file_url(manifest_url: str, manifest: dict[str, Any], entrypoint: str) -> str:
+    quoted_entrypoint = quote(entrypoint.replace("\\", "/"), safe="/")
+    base_url = str(manifest.get("base_url") or "").strip()
+    if base_url:
+        if base_url.startswith(("http://", "https://")):
+            return urljoin(_ensure_url_dir(base_url), quoted_entrypoint)
+        return urljoin(urljoin(manifest_url, "."), _ensure_url_dir(base_url) + quoted_entrypoint)
+    return urljoin(manifest_url, quoted_entrypoint)
+
+
+def _extract_entrypoint_file(manifest: dict[str, Any]) -> tuple[str, str, int]:
+    entrypoint = str(manifest.get("entrypoint") or "").strip().replace("\\", "/")
+    files = manifest.get("files")
+    if not entrypoint or not isinstance(files, list):
+        raise ValueError("launcher manifest must contain entrypoint and files")
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("path") or "").replace("\\", "/") != entrypoint:
+            continue
+        sha256 = str(item.get("sha256") or "").strip().lower()
+        size = int(item.get("size") or 0)
+        if len(sha256) != 64 or not size:
+            raise ValueError("launcher manifest entrypoint has invalid hash or size")
+        return entrypoint, sha256, size
+    raise ValueError(f"launcher manifest does not include entrypoint file: {entrypoint}")
+
+
 def check_for_update() -> dict[str, Any]:
-    """
-    Synchronous check against LAUNCHER_UPDATE_URL.
-
-    Returns:
-      {"available": bool, "remote_version": str|None, "download_url": str|None,
-       "sha256": str|None, "error": str|None}
-    """
-    if not LAUNCHER_UPDATE_URL:
-        _update(state=STATE_DISABLED, active=False)
+    if not LAUNCHER_UPDATE_ENABLED or not _is_frozen_exe():
+        _update(state=UpdateState.DISABLED, active=False)
         return {"available": False, "remote_version": None, "download_url": None, "sha256": None, "error": None}
 
-    if not _is_frozen_exe():
-        # Guard against source-run update attempts that can corrupt launcher.py.
-        _update(state=STATE_DISABLED, active=False)
-        return {"available": False, "remote_version": None, "download_url": None, "sha256": None, "error": None}
-
-    _update(state=STATE_CHECKING, active=True, error=None)
+    _update(state=UpdateState.CHECKING, active=True, error=None)
     try:
-        resp = requests.get(LAUNCHER_UPDATE_URL, timeout=DOWNLOAD_TIMEOUT_SEC)
-        resp.raise_for_status()
-        data = resp.json()
+        request = urllib.request.Request(LAUNCHER_MANIFEST_URL, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT_SEC) as response:
+            manifest = json_loads_bytes(response.read())
+        if not isinstance(manifest, dict) or int(manifest.get("schema", 0)) != 1:
+            raise ValueError("unsupported launcher manifest")
 
-        remote_ver = str(data.get("version", "")).strip()
-        download_url = str(data.get("download_url", "")).strip()
-        sha256 = str(data.get("sha256", "")).strip().lower() or None
+        remote_version = str(manifest.get("version") or "").strip()
+        entrypoint, sha256, _size = _extract_entrypoint_file(manifest)
+        download_url = _manifest_file_url(LAUNCHER_MANIFEST_URL, manifest, entrypoint)
 
-        if not remote_ver or not download_url:
-            raise ValueError("version.json must contain 'version' and 'download_url'")
-        if sha256 and (len(sha256) != 64 or any(ch not in "0123456789abcdef" for ch in sha256)):
-            raise ValueError("version.json has invalid 'sha256' value")
+        if not remote_version:
+            raise ValueError("launcher manifest version is empty")
 
-        if _is_newer(remote_ver, LAUNCHER_VERSION):
-            _update(state=STATE_AVAILABLE, active=False, remote_version=remote_ver)
-            return {
-                "available": True,
-                "remote_version": remote_ver,
-                "download_url": download_url,
-                "sha256": sha256,
-                "error": None,
-            }
+        if _is_same_version(remote_version):
+            _update(state=UpdateState.UP_TO_DATE, active=False, remote_version=remote_version)
+            return {"available": False, "remote_version": remote_version, "download_url": None, "sha256": None, "error": None}
 
-        _update(state=STATE_UP_TO_DATE, active=False, remote_version=remote_ver)
-        return {
-            "available": False,
-            "remote_version": remote_ver,
-            "download_url": None,
-            "sha256": None,
-            "error": None,
-        }
-
+        _update(state=UpdateState.AVAILABLE, active=False, remote_version=remote_version)
+        return {"available": True, "remote_version": remote_version, "download_url": download_url, "sha256": sha256, "error": None}
     except Exception as exc:
-        msg = str(exc)
-        _update(state=STATE_ERROR, active=False, error=msg)
-        return {"available": False, "remote_version": None, "download_url": None, "sha256": None, "error": msg}
+        _update(state=UpdateState.ERROR, active=False, error=str(exc))
+        return {"available": False, "remote_version": None, "download_url": None, "sha256": None, "error": str(exc)}
 
 
-def start_update(download_url: str, sha256: str | None = None) -> dict[str, Any]:
-    """
-    Start background download + apply.
+def start_update() -> dict[str, Any]:
+    """Download and apply the update described by the trusted HTTPS manifest.
 
-    download_url: direct link to the new .exe
-    sha256: optional expected SHA-256 checksum
+    The URL and hash come only from ``check_for_update`` (a fixed manifest
+    URL), never from the caller, so a compromised UI cannot point the updater
+    at an arbitrary executable.
     """
     global _thread
 
-    if not _is_frozen_exe():
-        return {"success": False, "error": "Самообновление доступно только в собранной .exe версии лаунчера"}
+    if not LAUNCHER_UPDATE_ENABLED or not _is_frozen_exe():
+        return {"success": False, "error": "Самообновление лаунчера отключено; используйте bootstrapper"}
 
-    url = (download_url or "").strip()
-    if not url:
-        return {"success": False, "error": "Пустой URL обновления"}
+    info = check_for_update()
+    if info.get("error"):
+        return {"success": False, "error": str(info["error"])}
+    if not info.get("available"):
+        return {"success": False, "error": "Обновление недоступно"}
 
-    expected_sha = (sha256 or "").strip().lower() or None
-    if expected_sha and (len(expected_sha) != 64 or any(ch not in "0123456789abcdef" for ch in expected_sha)):
-        return {"success": False, "error": "Некорректный SHA-256 для обновления"}
+    url = str(info.get("download_url") or "").strip()
+    expected_sha = str(info.get("sha256") or "").strip().lower()
+    if not url or not is_download_url_allowed(url):
+        return {"success": False, "error": "Небезопасный URL обновления"}
+    if len(expected_sha) != 64 or any(ch not in "0123456789abcdef" for ch in expected_sha):
+        return {"success": False, "error": "В манифесте нет корректного sha256 обновления"}
 
     with _lock:
         if _thread is not None and _thread.is_alive():
             return {"success": False, "error": "Обновление уже выполняется"}
-
-    current_exe = _current_exe()
-    dest = _update_tmp_path()
-    _safe_unlink(dest)
-
-    _thread = threading.Thread(
-        target=_download_and_apply,
-        args=(url, dest, current_exe, expected_sha),
-        daemon=True,
-        name="launcher-updater",
-    )
-    _thread.start()
+        dest = _update_tmp_path()
+        _safe_unlink(dest)
+        _thread = threading.Thread(
+            target=_download_and_apply,
+            args=(url, dest, _current_exe(), expected_sha),
+            daemon=True,
+            name="launcher-updater",
+        )
+        _thread.start()
     return {"success": True}
 
-
-#  Internal
 
 def _download_and_apply(download_url: str, dest: Path, current_exe: Path, expected_sha256: str | None) -> None:
     try:
         _update(
-            state=STATE_DOWNLOADING,
+            state=UpdateState.DOWNLOADING,
             active=True,
             percent=0.0,
             downloaded_mb=0.0,
@@ -242,109 +226,66 @@ def _download_and_apply(download_url: str, dest: Path, current_exe: Path, expect
             speed_mb=0.0,
             error=None,
         )
+        def report_progress(progress: DownloadProgress) -> None:
+            _update(
+                percent=round(progress.percent, 1),
+                downloaded_mb=round(progress.downloaded_bytes / 1_048_576, 2),
+                total_mb=round(progress.total_bytes / 1_048_576, 2),
+                speed_mb=round(progress.speed_bytes_per_sec / 1_048_576, 2),
+            )
 
-        with requests.get(download_url, stream=True, timeout=DOWNLOAD_TIMEOUT_SEC) as resp:
-            resp.raise_for_status()
+        result = download_to_file(
+            download_url,
+            dest,
+            user_agent=USER_AGENT,
+            timeout=DOWNLOAD_TIMEOUT_SEC,
+            chunk_size=DOWNLOAD_CHUNK_SIZE,
+            progress_interval=DOWNLOAD_PROGRESS_INTERVAL_SEC,
+            on_progress=report_progress,
+        )
 
-            total = int(resp.headers.get("content-length", 0))
-            total_mb = total / 1_048_576 if total > 0 else 0.0
-            downloaded = 0
-            last_time = time.monotonic()
-            last_bytes = 0
-
-            with open(dest, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
-                    if not chunk:
-                        continue
-                    f.write(chunk)
-                    downloaded += len(chunk)
-
-                    now = time.monotonic()
-                    dt = now - last_time
-                    if dt >= 0.4:
-                        speed_mb = (downloaded - last_bytes) / 1_048_576 / dt
-                        pct = (downloaded / total * 100) if total > 0 else 0.0
-                        _update(
-                            percent=round(pct, 1),
-                            downloaded_mb=round(downloaded / 1_048_576, 2),
-                            total_mb=round(total_mb, 2),
-                            speed_mb=round(speed_mb, 2),
-                        )
-                        last_time = now
-                        last_bytes = downloaded
-
-        _verify_downloaded_exe(dest, expected_sha256)
-        _update(percent=100.0, downloaded_mb=round(dest.stat().st_size / 1_048_576, 2))
+        _verify_downloaded_exe(dest, expected_sha256, actual_sha256=result.sha256)
+        _update(
+            percent=100.0,
+            downloaded_mb=round(result.downloaded_bytes / 1_048_576, 2),
+            speed_mb=0.0,
+        )
         _apply_update(dest, current_exe)
-
     except Exception as exc:
         _safe_unlink(dest)
-        _update(state=STATE_ERROR, active=False, error=str(exc))
+        _update(state=UpdateState.ERROR, active=False, error=str(exc))
 
 
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1_048_576), b""):
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1_048_576), b""):
             digest.update(chunk)
     return digest.hexdigest()
 
 
-def _verify_downloaded_exe(path: Path, expected_sha256: str | None) -> None:
+def json_loads_bytes(data: bytes) -> Any:
+    import json
+
+    return json.loads(data.decode("utf-8-sig"))
+
+
+def _verify_downloaded_exe(path: Path, expected_sha256: str, *, actual_sha256: str | None = None) -> None:
     if not path.exists():
         raise FileNotFoundError("Файл обновления не найден")
-
-    size = path.stat().st_size
-    if size < 128 * 1024:
-        raise ValueError("Скачанный файл слишком маленький для .exe, возможно получена ошибка/HTML вместо бинарника")
-
-    with open(path, "rb") as f:
-        mz = f.read(2)
-    if mz != b"MZ":
-        raise ValueError("Скачанный файл не является валидным Windows .exe")
-
-    if expected_sha256:
-        actual = _sha256_file(path)
-        if actual.lower() != expected_sha256.lower():
-            raise ValueError("SHA-256 скачанного файла не совпадает с version.json")
+    if path.stat().st_size < 128 * 1024:
+        raise ValueError("Скачанный файл слишком маленький для .exe")
+    if path.read_bytes()[:2] != b"MZ":
+        raise ValueError("Скачанный файл не является Windows .exe")
+    expected = str(expected_sha256 or "").strip().lower()
+    if len(expected) != 64:
+        raise ValueError("Отсутствует ожидаемый sha256 обновления")
+    if (actual_sha256 or _sha256_file(path)).lower() != expected:
+        raise ValueError("SHA-256 скачанного файла не совпадает с manifest")
 
 
 def _ps_quote(value: str) -> str:
-    """Escape string for single-quoted PowerShell literal."""
     return value.replace("'", "''")
-
-
-def _sanitize_launch_env(env: dict[str, str]) -> tuple[dict[str, str], list[str], int]:
-    """
-    Remove env vars that can leak onefile/pyinstaller runtime context
-    into the relaunched executable and break startup.
-    """
-    clean = dict(env)
-    removed: list[str] = []
-    removed_path_entries = 0
-
-    prefixes = ("PYTHONNET", "_PYI", "PYI_", "PYINSTALLER", "_MEI")
-    exact = {"PYTHONHOME", "PYTHONPATH"}
-
-    for key in list(clean.keys()):
-        upper = key.upper()
-        if upper in exact or any(upper.startswith(pref) for pref in prefixes):
-            removed.append(key)
-            clean.pop(key, None)
-
-    path_key = next((k for k in clean.keys() if k.upper() == "PATH"), None)
-    if path_key:
-        kept: list[str] = []
-        for part in clean[path_key].split(os.pathsep):
-            if not part:
-                continue
-            if "_MEI" in part.upper():
-                removed_path_entries += 1
-                continue
-            kept.append(part)
-        clean[path_key] = os.pathsep.join(kept)
-
-    return clean, removed, removed_path_entries
 
 
 def _build_swap_script(current_exe: Path, new_exe: Path, backup_exe: Path, pid_to_wait: int) -> str:
@@ -353,51 +294,18 @@ def _build_swap_script(current_exe: Path, new_exe: Path, backup_exe: Path, pid_t
     bak = _ps_quote(str(backup_exe))
     return f"""
 $ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
 $pidToWait = {pid_to_wait}
 $current = '{cur}'
 $newExe = '{new}'
 $backup = '{bak}'
-
-if (-not (Test-Path -LiteralPath $newExe)) {{
-    exit 1
-}}
-$expectedLen = (Get-Item -LiteralPath $newExe).Length
 
 for ($i = 0; $i -lt 1800; $i++) {{
     if (-not (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue)) {{ break }}
     Start-Sleep -Milliseconds 100
 }}
 
-# Ensure relaunched launcher starts with clean env, similar to manual double-click.
-Get-ChildItem Env: | Where-Object {{
-    $_.Name -like 'PYTHONNET*' -or
-    $_.Name -eq 'PYTHONHOME' -or
-    $_.Name -eq 'PYTHONPATH' -or
-    $_.Name -like '_PYI*' -or
-    $_.Name -like 'PYI_*' -or
-    $_.Name -like 'PYINSTALLER*' -or
-    $_.Name -like '_MEI*'
-}} | ForEach-Object {{
-    Remove-Item -LiteralPath ("Env:" + $_.Name) -ErrorAction SilentlyContinue
-}}
-if ($env:Path) {{
-    $parts = $env:Path -split ';'
-    $kept = @()
-    foreach ($entry in $parts) {{
-        if ([string]::IsNullOrWhiteSpace($entry)) {{ continue }}
-        if ($entry -like '*_MEI*') {{ continue }}
-        $kept += $entry
-    }}
-    $env:Path = ($kept -join ';')
-}}
-
-$swapped = $false
 for ($i = 0; $i -lt 240; $i++) {{
     try {{
-        if (-not (Test-Path -LiteralPath $newExe)) {{
-            throw 'Downloaded update file is missing'
-        }}
         if (Test-Path -LiteralPath $backup) {{
             Remove-Item -LiteralPath $backup -Force -ErrorAction Stop
         }}
@@ -405,39 +313,10 @@ for ($i = 0; $i -lt 240; $i++) {{
             Move-Item -LiteralPath $current -Destination $backup -Force -ErrorAction Stop
         }}
         Move-Item -LiteralPath $newExe -Destination $current -Force -ErrorAction Stop
-        if (Test-Path -LiteralPath $current) {{
-            $len = (Get-Item -LiteralPath $current).Length
-            if ($len -ne $expectedLen) {{
-                throw "size mismatch after swap: expected=$expectedLen actual=$len"
-            }}
-        }}
-        Start-Sleep -Milliseconds 1500
-        $launched = $false
-        for ($j = 0; $j -lt 5; $j++) {{
-            try {{
-                $proc = Start-Process -FilePath $current -WorkingDirectory (Split-Path -Path $current -Parent) -PassThru -ErrorAction Stop
-                Start-Sleep -Milliseconds 1200
-                if (-not $proc.HasExited) {{
-                    $launched = $true
-                    break
-                }}
-            }} catch {{}}
-            Start-Sleep -Milliseconds 700
-        }}
-        if (-not $launched) {{
-            throw "Updated launcher exited immediately after all launch retries"
-        }}
-        $swapped = $true
+        Start-Process -FilePath $current -WorkingDirectory (Split-Path -Path $current -Parent)
         break
     }} catch {{
         Start-Sleep -Milliseconds 250
-    }}
-}}
-if (-not $swapped) {{
-    if ((-not (Test-Path -LiteralPath $current)) -and (Test-Path -LiteralPath $backup)) {{
-        try {{
-            Move-Item -LiteralPath $backup -Destination $current -Force -ErrorAction Stop
-        }} catch {{}}
     }}
 }}
 """
@@ -445,22 +324,11 @@ if (-not $swapped) {{
 
 def _spawn_swapper(current_exe: Path, new_exe: Path) -> None:
     backup_exe = current_exe.with_suffix(".exe.old")
-    script = _build_swap_script(current_exe, new_exe, backup_exe, os.getpid())
-    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
-
+    encoded = base64.b64encode(_build_swap_script(current_exe, new_exe, backup_exe, os.getpid()).encode("utf-16le")).decode("ascii")
     windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
     ps_exe = windir / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
     ps_cmd = str(ps_exe if ps_exe.exists() else Path("powershell.exe"))
-
-    flags = 0
-    if hasattr(subprocess, "CREATE_NO_WINDOW"):
-        flags |= subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
-    if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
-        flags |= subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
-
-    # Prevent leaking python/pythonnet/pyinstaller runtime env vars into helper/new launcher process.
-    clean_env, _, _ = _sanitize_launch_env(os.environ)
-
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     subprocess.Popen(
         [
             ps_cmd,
@@ -479,26 +347,19 @@ def _spawn_swapper(current_exe: Path, new_exe: Path) -> None:
         cwd=str(current_exe.parent),
         creationflags=flags,
         close_fds=True,
-        env=clean_env,
+        env=sanitize_child_env(os.environ),
     )
 
 
 def _apply_update(new_exe: Path, current_exe: Path) -> None:
-    """
-    Start detached replacer process and terminate current launcher.
-    """
-    _update(state=STATE_APPLYING, active=True)
+    _update(state=UpdateState.APPLYING, active=True)
     _spawn_swapper(current_exe, new_exe)
-
-    _update(state=STATE_DONE, active=False)
-    time.sleep(0.5)  # let UI observe state=done
-
+    _update(state=UpdateState.DONE, active=False)
+    time.sleep(0.5)
     if _shutdown_callback is not None:
         try:
             _shutdown_callback()
-            # Let main thread exit gracefully after webview closes.
             return
         except Exception:
             pass
-    # Fallback when callback is absent/failed.
     os._exit(0)

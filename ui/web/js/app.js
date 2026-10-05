@@ -1,155 +1,194 @@
-﻿/**
- * app.js — роутер и точка входа.
- *
- * Новый поток:
- *   1. pywebview готов
- *   2. Восстанавливаем сессию
- *   3. Если нет сессии — логин
- *   4. Проверка/скачивание происходит только после авторизации (по нажатию Play)
+/**
+ * Application state and startup orchestration.
  */
 
 const App = (() => {
-  let _started = false;
-
-  // ── Страницы ────────────────────────────────────────────────────────────────
-  const pages = {
-    update:   document.getElementById('page-update'),
-    login:    document.getElementById('page-login'),
-    download: document.getElementById('page-download'),
-    main:     document.getElementById('page-main'),
+  const state = {
+    builds: [],
+    selectedBuildId: null,
+    ramMin: 2,
+    ramMax: 16,
+    ramDefault: 6,
+    launcherVersion: '',
+    mode: 'prod',
+    dev: false,
+    features: { news_enabled: false },
+    news: [],
+    webBaseUrl: '',
+    backendAvailable: false,
+    loaded: false,
   };
+  let stateLoadPromise = null;
 
-  function showPage(name) {
-    Object.entries(pages).forEach(([key, el]) => {
-      el.hidden = key !== name;
-    });
+  function applyAppState(payload) {
+    state.builds = Array.isArray(payload.builds) ? payload.builds : [];
+    state.selectedBuildId = payload.selected_build_id || (state.builds[0] && state.builds[0].id) || null;
+    state.ramMin = payload.ram_min_gb || state.ramMin;
+    state.ramMax = payload.ram_max_gb || state.ramMax;
+    state.ramDefault = payload.ram_default_gb || state.ramDefault;
+    state.launcherVersion = payload.launcher_version || '';
+    state.mode = payload.mode || 'prod';
+    state.dev = Boolean(payload.dev);
+    state.backendAvailable = Boolean(payload.backend_available);
+    if (payload.features && typeof payload.features === 'object') {
+      state.features = payload.features;
+    }
+    state.news = Array.isArray(payload.news) ? payload.news : [];
+    state.webBaseUrl = payload.web_base_url || '';
   }
 
-  // ── Переходы ────────────────────────────────────────────────────────────────
-  function showLogin(lastLogin = '') {
-    showPage('login');
-    LoginPage.init(lastLogin);
+  function renderAll() {
+    Shell.setNewsVisible(Boolean(state.features.news_enabled));
+    Home.render();
+    Builds.render();
+    Settings.render();
+    News.render(state.news);
+  }
+
+  function prepare() {
+    if (state.loaded) return Promise.resolve(true);
+    if (stateLoadPromise) return stateLoadPromise;
+
+    stateLoadPromise = (async () => {
+      try {
+        const payload = await API.getAppState();
+        applyAppState(payload || {});
+        return true;
+      } catch (err) {
+        console.error('[app] app state load failed:', err);
+        return false;
+      } finally {
+        // The startup attempt is complete even when the backend is unavailable;
+        // the launcher can still render its local fallback state.
+        state.loaded = true;
+        stateLoadPromise = null;
+      }
+    })();
+
+    return stateLoadPromise;
+  }
+
+  async function enterMain() {
+    if (!state.loaded) {
+      Modals.showLoading('Загрузка данных...');
+      try {
+        await prepare();
+      } finally {
+        Modals.hide();
+      }
+    }
+    renderAll();
+  }
+
+  async function refreshBuilds() {
+    try {
+      const result = await API.getBuilds();
+      if (result && result.success) {
+        state.builds = result.builds || [];
+        state.selectedBuildId = result.selected_build_id || state.selectedBuildId;
+      }
+    } catch (err) {
+      console.warn('[app] builds refresh failed:', err);
+    }
+    renderAll();
+  }
+
+  async function selectBuild(buildId) {
+    try {
+      const result = await API.selectBuild(buildId);
+      if (!result || !result.success) {
+        await Modals.alert((result && result.error) || 'Не удалось выбрать сборку', { title: 'Сборки' });
+        return;
+      }
+      state.selectedBuildId = result.selected_build_id;
+      await refreshBuilds();
+    } catch (err) {
+      console.error('[app] select build failed:', err);
+    }
+  }
+
+  function formatMb(value) {
+    return (value || 0).toFixed(1);
+  }
+
+  function pollDownloadFinish() {
+    return new Promise((resolve) => {
+      const timer = setInterval(async () => {
+        let status;
+        try {
+          status = await API.getDownloadProgress();
+        } catch (err) {
+          clearInterval(timer);
+          resolve({ done: false, error: String(err) });
+          return;
+        }
+
+        const pct = (status.percent || 0).toFixed(1);
+        if (status.state === 'extracting') {
+          Modals.updateProgress({ status: 'Распаковка файлов...', percent: pct, speed: '-', size: '' });
+        } else {
+          Modals.updateProgress({
+            status: 'Загрузка файлов...',
+            percent: pct,
+            speed: `${formatMb(status.speed_mb)} МБ/с`,
+            size: `${formatMb(status.downloaded_mb)} / ${formatMb(status.total_mb)} МБ`,
+          });
+        }
+
+        if (!status.active) {
+          clearInterval(timer);
+          if (status.state === 'done') {
+            resolve({ done: true });
+          } else if (status.state === 'cancelled') {
+            resolve({ done: false, cancelled: true });
+          } else {
+            resolve({ done: false, error: status.error || 'Неизвестная ошибка загрузки' });
+          }
+        }
+      }, 400);
+    });
   }
 
   /**
-   * Переход на экран загрузки.
-   * @param {object}  [opts]
-   * @param {string}  [opts.subtitle]
-   * @param {boolean} [opts.autoStart]
-   * @param {string}  [opts.buildId]
-   * @param {function}[opts.onDone]
-   * @param {function}[opts.onCancel]
+   * Start a build download and poll progress into the shared progress modal.
+   * Resolves true when the download and extraction finished successfully.
    */
-  function showDownload({ subtitle, autoStart = false, buildId = null, onDone = null, onCancel = null } = {}) {
-    showPage('download');
-    DownloadPage.init({
-      subtitle,
-      autoStart,
-      buildId,
-      onDone:   onDone || _onDownloadDone,
-      onCancel: onCancel,
+  async function runDownload(buildId, title) {
+    Modals.showProgress(title, () => {
+      API.cancelDownload().catch((err) => console.warn('[app] cancel failed:', err));
     });
-  }
 
-  /** Возвращает на главный экран (используется после отмены операции). */
-  async function restoreMain() {
+    let started;
     try {
-      const user = await API.getCurrentUser();
-      if (user.logged_in) {
-        await showMain(user.username);
-        return;
-      }
-      showLogin(user.last_login || '');
-      return;
-    } catch (e) {}
-    showLogin();
-  }
-
-  /**
-   * Показывает стилизованный диалог подтверждения.
-   * Возвращает Promise<boolean>.
-   */
-  function showConfirm(message) {
-    return new Promise(resolve => {
-      const overlay   = document.getElementById('modal-confirm');
-      const msgEl     = document.getElementById('modal-message');
-      const okBtn     = document.getElementById('modal-ok-btn');
-      const cancelBtn = document.getElementById('modal-cancel-btn');
-
-      msgEl.textContent = message;
-      overlay.hidden = false;
-
-      function cleanup() {
-        overlay.hidden = true;
-        okBtn.onclick     = null;
-        cancelBtn.onclick = null;
-      }
-
-      okBtn.onclick     = () => { cleanup(); resolve(true);  };
-      cancelBtn.onclick = () => { cleanup(); resolve(false); };
-    });
-  }
-
-  async function showMain(username) {
-    showPage('main');
-    await MainPage.init(username);
-  }
-
-  // ── Выход ───────────────────────────────────────────────────────────────────
-  async function logout() {
-    await API.logout();
-    showLogin();
-  }
-
-  // ── Колбэк завершения игры (вызывается из Python через evaluate_js) ─────────
-  function onGameExit(rc) {
-    MainPage.onGameExit(rc);
-  }
-
-  // ── После успешной загрузки игры ────────────────────────────────────────────
-  async function _onDownloadDone() {
-    try {
-      const user = await API.getCurrentUser();
-      if (user.logged_in) {
-        await showMain(user.username);
-        return;
-      }
-      showLogin(user.last_login || '');
-      return;
-    } catch (e) {}
-    showLogin();
-  }
-
-  // ── Старт ───────────────────────────────────────────────────────────────────
-  async function init() {
-    if (_started) return;
-    _started = true;
-
-    document.getElementById('btn-logout').onclick = logout;
-
-    // 1. Проверяем обновление ДО любого интерфейса.
-    // Если есть обновление — процесс завершится сам (os._exit).
-    // Если обновлений нет — резолвится и идём дальше.
-    await Updater.checkAndApply();
-
-    // 2. Восстановление сессии / логин
-    try {
-      const user = await API.getCurrentUser();
-      if (user.logged_in) {
-        await showMain(user.username);
-        return;
-      }
-      showLogin(user.last_login || '');
-      return;
-    } catch (e) {
-      console.warn('[app] Ошибка восстановления сессии:', e);
+      started = await API.startDownload(buildId);
+    } catch (err) {
+      console.error('[app] download start failed:', err);
+      started = null;
+    }
+    if (!started || !started.success) {
+      Modals.hide();
+      await Modals.alert((started && started.error) || 'Не удалось начать загрузку', { title: 'Ошибка загрузки' });
+      return false;
     }
 
-    showLogin();
+    const result = await pollDownloadFinish();
+    Modals.hide();
+    if (result.error) {
+      await Modals.alert(result.error, { title: 'Ошибка загрузки' });
+    }
+    return Boolean(result.done);
   }
 
-  window.addEventListener('pywebviewready', init, { once: true });
-  if (window.pywebview && window.pywebview.api) init();
+  function init() {
+    Shell.init();
+    Home.init();
+    Settings.init();
+    AuthGate.init();
+  }
 
-  return { showLogin, showDownload, showMain, onGameExit, restoreMain, showConfirm };
+  // Scripts load at the end of <body>, so the DOM is ready; bridge-dependent
+  // calls await the pywebviewready event internally through API.ready().
+  init();
+
+  return { state, prepare, enterMain, refreshBuilds, selectBuild, runDownload };
 })();

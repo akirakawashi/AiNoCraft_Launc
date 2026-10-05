@@ -1,15 +1,14 @@
 [project]
-name = "launcher"
+name = "ainocraft-launcher"
 version = "0.1.0"
-description = "Default template for PDM package"
-authors = [
-    {name = "akirakawashi", email = "mr.oldman.23@gmail.com"},
-]
-dependencies = ["pywebview>=6.1", "requests>=2.28", "pyinstaller>=6.19.0"]
-requires-python = "==3.11.*"
+description = "AiNoCraft desktop launcher shell"
+dependencies = ["pywebview>=6.1", "pyinstaller>=6.19.0", "minio>=7.2.20"]
+requires-python = "==3.12.*"
 readme = "README.md"
 license = {text = "MIT"}
 
-
 [tool.pdm]
 distribution = false
+
+[tool.pdm.scripts]
+build-release = "python tools/build_release.py"

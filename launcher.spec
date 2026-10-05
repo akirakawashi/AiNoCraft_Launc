@@ -2,23 +2,27 @@
 
 from pathlib import Path
 
-datas = [('ui', 'ui'), ('build_profiles.json', '.'), ('version.json', '.')]
-_injector_candidates = [
-    Path('injector') / 'authlib-injector-1.2.7.jar',
-    Path('authlib-injector-1.2.7.jar'),
-]
-for _injector_jar in _injector_candidates:
-    if _injector_jar.exists():
-        _dest = str(_injector_jar.parent) if str(_injector_jar.parent) != '.' else '.'
-        datas.append((str(_injector_jar), _dest))
-        break
+
+datas = [("ui", "ui")]
+
+build_profiles = Path("build_profiles.json")
+if build_profiles.exists():
+    datas.append((str(build_profiles), "."))
+
+build_metadata = Path("build_metadata.json")
+if build_metadata.exists():
+    datas.append((str(build_metadata), "."))
+
+injector_jar = Path("injector") / "authlib-injector-1.2.7.jar"
+if injector_jar.exists():
+    datas.append((str(injector_jar), "injector"))
 
 a = Analysis(
-    ['launcher.py'],
+    ["launcher.py"],
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=["webview.platforms.edgechromium"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -34,7 +38,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='AiNoCraftLauncher',
+    name="AiNoCraftLauncher",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -47,5 +51,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['ui\\img\\logo.ico'],
+    icon=["ui\\img\\logo.ico"],
 )

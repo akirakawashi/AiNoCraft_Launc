@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "builds": {
+    "tech": {
+      "revision": "2026.07.10-01",
+      "download_url": "downloads/AiNoCraftTech-2026.07.10-01.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "archive_size_bytes": 2147483648,
+      "unpacked_size_bytes": 7516192768
+    },
+    "magic": {
+      "revision": "2026.07.10-01",
+      "download_url": "downloads/AiNoCraftMagic-2026.07.10-01.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "archive_size_bytes": 2147483648,
+      "unpacked_size_bytes": 7516192768
+    },
+    "rpg": {
+      "revision": "2026.07.10-01",
+      "download_url": "downloads/AiNoCraftRpg-2026.07.10-01.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "archive_size_bytes": 2147483648,
+      "unpacked_size_bytes": 7516192768
+    },
+    "classic": {
+      "revision": "2026.07.10-01",
+      "download_url": "downloads/AiNoCraftClassic-2026.07.10-01.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "archive_size_bytes": 2147483648,
+      "unpacked_size_bytes": 7516192768
+    }
+  }
+}

@@ -1,1 +1,1 @@
-# core пакет лаунчера AiNoCraft
+"""Core helpers kept for the launcher rebuild."""

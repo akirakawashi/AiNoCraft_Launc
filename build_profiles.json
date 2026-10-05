@@ -1,34 +1,34 @@
 {
   "tech": {
-    "name": "AiNoCraftTech",
+    "name": "tech",
     "folder_name": "AiNoCraftTech",
     "version_name": "Tech",
     "download_url": "https://storage.ainocraft.com/downloads/AiNoCraftTech.zip",
     "glyph": "T",
     "accent_color": "#8fd5ff"
   },
-  "rpg": {
-    "name": "AiNoCraftRPG",
-    "folder_name": "AiNoCraftRPG",
-    "version_name": "RPG",
-    "download_url": "https://storage.ainocraft.com/downloads/AiNoCraftRPG.zip",
-    "glyph": "R",
-    "accent_color": "#9df0bf"
-  },
   "magic": {
-    "name": "AiNoCraftMagic",
+    "name": "magic",
     "folder_name": "AiNoCraftMagic",
     "version_name": "Magic",
     "download_url": "https://storage.ainocraft.com/downloads/AiNoCraftMagic.zip",
     "glyph": "M",
-    "accent_color": "#ffc4f0"
+    "accent_color": "#c98fff"
   },
-  "sky": {
-    "name": "AiNoCraftSky",
-    "folder_name": "AiNoCraftSky",
-    "version_name": "Sky",
-    "download_url": "https://storage.ainocraft.com/downloads/AiNoCraftSky.zip",
-    "glyph": "S",
-    "accent_color": "#9edcff"
+  "rpg": {
+    "name": "rpg",
+    "folder_name": "AiNoCraftRpg",
+    "version_name": "RPG",
+    "download_url": "https://storage.ainocraft.com/downloads/AiNoCraftRpg.zip",
+    "glyph": "R",
+    "accent_color": "#ffb86b"
+  },
+  "classic": {
+    "name": "classic",
+    "folder_name": "AiNoCraftClassic",
+    "version_name": "Classic",
+    "download_url": "https://storage.ainocraft.com/downloads/AiNoCraftClassic.zip",
+    "glyph": "C",
+    "accent_color": "#b8c6ff"
   }
 }

@@ -1,1 +1,1 @@
-# ui пакет лаунчера AiNoCraft
+"""Launcher UI bridge package."""

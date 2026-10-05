@@ -4,317 +4,376 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AiNoCraft Launcher</title>
+  <link rel="preload" as="image" href="../img/background.png" />
   <link rel="stylesheet" href="./css/base.css" />
-  <link rel="stylesheet" href="./css/login.css" />
-  <link rel="stylesheet" href="./css/main.css" />
-  <link rel="stylesheet" href="./css/download.css" />
 </head>
-<body>
+<body class="auth-locked startup-loading">
+  <main class="launcher-window" aria-label="AiNoCraft Launcher">
+    <header class="titlebar">
+      <div class="titlebar__brand">
+        <img class="titlebar__icon" src="../img/logo.png" alt="" />
+        <span>AiNoCraft</span>
+      </div>
+      <div class="titlebar__controls" aria-label="Управление окном">
+        <button class="titlebar__button" type="button" id="window-minimize" aria-label="Свернуть">-</button>
+        <button class="titlebar__button titlebar__button--close" type="button" id="window-close" aria-label="Закрыть">x</button>
+      </div>
+    </header>
 
-  <!-- ════════════════════════ ЭКРАН: ОБНОВЛЕНИЕ ЛАУНЧЕРА ══════════════════ -->
-  <div id="page-update" class="page" hidden>
-    <div class="login-bg">
-      <img src="../img/background.png" alt="" class="login-bg__img" onerror="this.style.display='none'" />
-      <div class="login-bg__overlay"></div>
+    <section class="startup-screen" id="startup-loader" role="status" aria-live="polite" aria-label="Запуск лаунчера">
+      <div class="startup-screen__content">
+        <div class="startup-screen__mark" aria-hidden="true">
+          <span class="startup-screen__ring"></span>
+          <img class="startup-screen__logo" src="../img/logo.png" alt="" />
+        </div>
+        <p class="startup-screen__title">AiNoCraft</p>
+        <p class="startup-screen__status">Проверяем сессию и загружаем сборки...</p>
+      </div>
+    </section>
+
+    <section class="login-screen" id="login-screen" aria-label="Авторизация AiNoCraft" aria-hidden="true" inert>
+      <div class="login-shell">
+        <div class="login-brand-main" aria-hidden="true">
+          <h1 class="login-brand-main__title">AiNoCraft</h1>
+        </div>
+
+        <form class="login-card" id="login-form" autocomplete="on" novalidate>
+          <div class="login-card__head">
+            <span class="login-card__rule" aria-hidden="true"></span>
+            <h2 class="login-card__title">Авторизация</h2>
+            <span class="login-card__rule" aria-hidden="true"></span>
+            <p class="login-card__subtitle">Войдите в аккаунт AiNoCraft</p>
+          </div>
+
+          <label class="login-field">
+            <span class="login-field__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21a8 8 0 0 0-16 0" />
+                <circle cx="12" cy="8" r="4" />
+              </svg>
+            </span>
+            <input id="login-username" name="username" type="text" placeholder="Логин или email" autocomplete="username" aria-label="Логин или email" />
+            <span class="login-field__placeholder">Логин или email</span>
+          </label>
+
+          <label class="login-field">
+            <span class="login-field__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="10" width="14" height="10" rx="2" />
+                <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+              </svg>
+            </span>
+            <input id="login-password" name="password" type="password" placeholder="Пароль" autocomplete="current-password" aria-label="Пароль" />
+            <span class="login-field__placeholder">Пароль</span>
+            <button class="login-eye" id="login-toggle-password" type="button" aria-label="Показать пароль" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </label>
+
+          <div class="login-card__meta">
+            <button class="login-link" id="login-forgot" type="button">Забыли пароль?</button>
+          </div>
+
+          <p class="login-error" id="login-error" role="alert" hidden>Неверный логин или пароль</p>
+
+          <button class="login-submit" id="login-submit" type="submit">
+            <span>Войти</span>
+          </button>
+
+          <button class="login-secondary" id="login-create-account" type="button">Создать аккаунт</button>
+        </form>
+      </div>
+    </section>
+
+    <nav class="side-nav" aria-label="Основная навигация">
+      <div class="side-nav__blur" aria-hidden="true"></div>
+      <div class="side-nav__items">
+        <button class="side-nav__item side-nav__item--active" type="button" data-nav="home" aria-current="page">
+          <span class="side-nav__icon side-nav__icon--home" aria-hidden="true"></span>
+          <span>Главная</span>
+        </button>
+        <button class="side-nav__item" type="button" data-nav="builds">
+          <span class="side-nav__icon side-nav__icon--builds" aria-hidden="true"></span>
+          <span>Сборки</span>
+        </button>
+        <button class="side-nav__item" type="button" data-nav="settings">
+          <span class="side-nav__icon side-nav__icon--settings" aria-hidden="true"></span>
+          <span>Настройки</span>
+        </button>
+        <button class="side-nav__item" type="button" data-nav="news" hidden>
+          <span class="side-nav__icon side-nav__icon--news" aria-hidden="true"></span>
+          <span>Новости</span>
+        </button>
+      </div>
+      <section class="side-nav__profile player-profile player-profile--default" aria-label="Профиль игрока">
+        <span class="player-profile__top-line" aria-hidden="true"></span>
+        <span class="player-profile__crest" aria-hidden="true"></span>
+        <div class="player-profile__avatar-wrap" aria-hidden="true">
+          <img class="player-profile__avatar" id="main-avatar" alt="" hidden />
+          <span class="player-profile__avatar-fallback" id="main-avatar-fallback">A</span>
+        </div>
+        <div class="player-profile__body">
+          <span class="player-profile__eyebrow">Добро пожаловать</span>
+          <span class="player-profile__name" id="main-username">Player</span>
+          <span class="role-badge role-badge--default" id="main-role">Common</span>
+        </div>
+        <span class="player-profile__divider" aria-hidden="true"></span>
+        <button class="player-profile__logout" id="btn-logout" type="button">Выход</button>
+      </section>
+    </nav>
+
+    <div class="settings-side-blur" aria-hidden="true">
+      <div class="settings-side-blur__image"></div>
+      <div class="settings-side-blur__feather"></div>
     </div>
-    <div class="login-card login-card--enhanced">
-      <div class="login-card__fx" aria-hidden="true"></div>
-      <div class="login-card__header">
-        <div class="login-card__logo-ring">
-          <img src="../img/logo.png" alt="AiNoCraft" class="login-card__hero-logo" />
-        </div>
-        <div class="login-card__heading">
-          <p class="login-card__tag">AiNoCraft Launcher</p>
-          <p class="login-card__title" id="upd-version">Проверка обновлений...</p>
-        </div>
+
+    <section class="hero" aria-label="Главный экран">
+      <div class="hero__crystal" aria-hidden="true">
+        <img src="../img/crystals.png" alt="" />
       </div>
-      <p class="login-card__sub" id="upd-status">Подключение к серверу...</p>
-      <div class="update-page__progress">
-        <div class="progress-track">
-          <div class="progress-fill" id="upd-bar" style="width:0%"></div>
-        </div>
-        <div class="dl-stats">
-          <span id="upd-percent"></span>
-          <span id="upd-speed"></span>
-          <span id="upd-size"></span>
-        </div>
-      </div>
-      <div class="login-error" id="upd-error" hidden>
-        <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-        <span id="upd-error-text"></span>
-      </div>
-      <p class="login-card__version">© 2026 AiNoCraft. · Все права защищены.</p>
-    </div>
-  </div>
+      <h1 class="hero__title">AiNoCraft</h1>
+      <p class="hero__subtitle">Твой мир. Твои правила. Твоя история.</p>
 
+      <button class="play-button" id="btn-play" type="button" aria-label="Играть">
+        <img class="play-button__base" src="../img/testbtn.png" alt="" />
+        <img class="play-button__border" src="../img/testborder.png" alt="" />
+        <span class="play-button__shine" aria-hidden="true"></span>
+        <span class="play-button__content">
+          <span class="play-button__icon" aria-hidden="true"></span>
+          <span class="play-button__text" id="play-label">Играть</span>
+        </span>
+      </button>
 
-  <!-- ══════════════════════════ ЭКРАН: АВТОРИЗАЦИЯ ══════════════════════════ -->
-  <div id="page-login" class="page" hidden>
+      <div class="launch-block" aria-label="Информация о запуске">
+        <div class="launch-panel">
+          <div class="launch-stat">
+            <span class="launch-stat__icon launch-stat__icon--build" aria-hidden="true"></span>
+            <span class="launch-stat__body">
+              <span class="launch-stat__eyebrow">Активная сборка</span>
+              <span class="launch-stat__value" id="stat-build-name">—</span>
+              <span class="launch-stat__desc" id="stat-build-desc"></span>
+            </span>
+          </div>
 
-    <div class="login-bg">
-      <img src="../img/background.png" alt="" class="login-bg__img" onerror="this.style.display='none'" />
-      <div class="login-bg__overlay"></div>
-    </div>
+          <span class="launch-panel__divider" aria-hidden="true"></span>
 
-    <div class="login-card login-card--enhanced">
-      <div class="login-card__fx" aria-hidden="true"></div>
+          <div class="launch-stat">
+            <span class="launch-stat__icon launch-stat__icon--version" aria-hidden="true"></span>
+            <span class="launch-stat__body">
+              <span class="launch-stat__eyebrow">Версия / Режим</span>
+              <span class="launch-stat__value" id="stat-version">—</span>
+              <span class="launch-stat__desc" id="stat-version-desc"></span>
+            </span>
+          </div>
 
-      <div class="login-card__header">
-        <div class="login-card__logo-ring">
-          <img src="../img/logo.png" alt="AiNoCraft" class="login-card__hero-logo" />
-        </div>
-        <div class="login-card__heading">
-          <p class="login-card__tag">AiNoCraft Launcher</p>
-          <p class="login-card__title">Авторизация</p>
-        </div>
-      </div>
-      <p class="login-card__sub">Войди чтобы начать играть</p>
+          <span class="launch-panel__divider" aria-hidden="true"></span>
 
-      <!-- Форма -->
-      <form id="login-form" class="login-form" novalidate>
-        <div class="input-group">
-          <label class="input-group__label" for="login-username">Логин</label>
-          <div class="input-wrap">
-            <svg class="input-icon" viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
-            <input id="login-username" name="username" type="text"
-                   class="input" placeholder="Введите логин"
-                   autocomplete="username" spellcheck="false" />
+          <div class="launch-stat">
+            <span class="launch-stat__icon launch-stat__icon--players" aria-hidden="true"></span>
+            <span class="launch-stat__body">
+              <span class="launch-stat__eyebrow">Статус сервера</span>
+              <span class="launch-stat__value launch-stat__value--online">AiNoCraft</span>
+              <span class="launch-stat__desc">игровой сервер</span>
+              <span class="launch-stat__status">
+                <span class="launch-stat__dot" aria-hidden="true"></span>Статус: Онлайн
+              </span>
+            </span>
           </div>
         </div>
 
-        <div class="input-group">
-          <label class="input-group__label" for="login-password">Пароль</label>
-          <div class="input-wrap">
-            <svg class="input-icon" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.8-2.2-5-5-5S7 3.2 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.7 1.4-3.1 3.1-3.1 1.7 0 3.1 1.4 3.1 3.1v2z"/></svg>
-            <input id="login-password" name="password" type="password"
-                   class="input" placeholder="Введите пароль"
-                   autocomplete="current-password" />
-            <button type="button" class="btn-eye" id="btn-toggle-pw" aria-label="Показать пароль">
-              <svg id="eye-icon" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zM12 17c-2.8 0-5-2.2-5-5s2.2-5 5-5 5 2.2 5 5-2.2 5-5 5zm0-8c-1.7 0-3 1.3-3 3s1.3 3 3 3 3-1.3 3-3-1.3-3-3-3z"/></svg>
+        <div class="launch-status launch-status--pending" id="launch-status">
+          <span class="launch-status__item">
+            <span class="launch-status__clock" aria-hidden="true"></span>
+            Версия лаунчера: <b id="launcher-version-label">—</b>
+          </span>
+          <span class="launch-status__bullet" aria-hidden="true"></span>
+          <span class="launch-status__item launch-status__files">
+            <span class="launch-status__label launch-status__label--ready">Все файлы готовы к игре</span>
+            <span class="launch-status__label launch-status__label--pending">Загрузите файлы</span>
+            <span class="launch-status__mark" aria-hidden="true"></span>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="settings-panel" id="settings-panel" aria-label="Настройки" aria-hidden="true" inert>
+      <header class="settings-panel__header">
+        <svg class="settings-panel__gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.2" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z" />
+        </svg>
+        <h2 class="settings-panel__title">Настройки</h2>
+      </header>
+
+      <div class="settings-panel__scroll">
+        <article class="settings-card">
+          <header class="settings-card__head">
+            <span class="settings-card__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2" /><rect x="9.5" y="9.5" width="5" height="5" /><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" /></svg>
+            </span>
+            <h3 class="settings-card__title">Оперативная память</h3>
+          </header>
+          <div class="settings-card__row">
+            <p class="settings-card__desc">Выделите память для игры</p>
+            <span class="ram-value" id="ram-value">6 GB</span>
+          </div>
+          <div class="ram-slider">
+            <input type="range" id="ram-slider" min="2" max="16" step="1" value="6" aria-label="Объем оперативной памяти в гигабайтах" />
+            <div class="ram-slider__scale" aria-hidden="true"><span id="ram-scale-min">2 GB</span><span id="ram-scale-max">16 GB</span></div>
+          </div>
+          <p class="settings-card__hint">Максимум зависит от памяти вашего компьютера</p>
+        </article>
+
+        <article class="settings-card">
+          <header class="settings-card__head">
+            <span class="settings-card__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4l7 2.8v5.2c0 4.5-2.8 7.8-7 9.2-4.2-1.4-7-4.7-7-9.2V6.2z" /></svg>
+            </span>
+            <h3 class="settings-card__title">Файлы игры</h3>
+          </header>
+          <div class="settings-card__row settings-card__row--stack">
+            <div class="settings-state settings-state--client">
+              <svg class="settings-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3.4l7 2.8v5.2c0 4.5-2.8 7.8-7 9.2-4.2-1.4-7-4.7-7-9.2V6.2z" />
+                <path d="M12 8.2v5.2" />
+                <path d="M12 16.5h.01" />
+              </svg>
+              <span class="settings-state__text" id="client-state-text">Состояние клиента: <b>проверка...</b></span>
+            </div>
+            <button class="settings-btn settings-btn--primary" type="button" id="btn-verify-files">
+              <svg class="settings-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="8.5" />
+                <path d="M8.5 12.3l2.3 2.3 4.9-5.2" />
+              </svg>
+              <span>Проверить</span>
             </button>
           </div>
-        </div>
+          <div class="file-status" id="files-state" hidden>
+            <div class="settings-state settings-state--files">
+              <svg class="settings-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12.2l4.1 4.1L19 6.8" />
+              </svg>
+              <span class="settings-state__text"><b>Сборка установлена</b></span>
+            </div>
+          </div>
+          <p class="settings-card__hint">Проверка удаляет файлы сборки и загружает их заново.</p>
+        </article>
 
-        <!-- Ошибка -->
-        <div id="login-error" class="login-error" hidden>
-          <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-          <span id="login-error-text"></span>
-        </div>
-
-        <button type="submit" class="btn-primary" id="btn-login">
-          <span id="btn-login-text">Войти</span>
-          <span id="btn-login-spinner" class="spinner" hidden></span>
-        </button>
-
-        <div class="login-actions">
-          <button type="button" class="btn-link" id="btn-forgot-password">
-            Забыли пароль?
-          </button>
-          <button type="button" class="btn-secondary login-register-btn" id="btn-register">
-            Зарегистрироваться
-          </button>
-        </div>
-      </form>
-
-      <p class="login-card__version">© 2026 AiNoCraft. · Все права защищены.</p>
-    </div>
-  </div>
-
-
-
-  <!-- ════════════════════════ ЭКРАН: ЗАГРУЗКА ИГРЫ ══════════════════════════ -->
-  <div id="page-download" class="page" hidden>
-
-    <div class="login-bg">
-      <img src="../img/background.png" alt="" class="login-bg__img" onerror="this.style.display='none'" />
-      <div class="login-bg__overlay"></div>
-    </div>
-
-    <div class="download-card">
-      <div class="login-card__logo">
-        <img src="../img/logo.png" alt="AiNoCraft" class="logo-img" />
-      </div>
-      <p class="login-card__sub" id="dl-subtitle">Игровые файлы не найдены</p>
-
-      <!-- Статус: ожидание -->
-      <div id="dl-section-idle">
-        <p class="dl-info-text">Для начала игры необходимо скачать и установить игровые файлы.</p>
-        <button class="btn-primary" id="btn-start-download">
-          <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-          Скачать и установить
-        </button>
-      </div>
-
-      <!-- Статус: процесс -->
-      <div id="dl-section-progress" hidden>
-        <p class="dl-status-text" id="dl-status-text">Подключение...</p>
-        <div class="progress-track">
-          <div class="progress-fill" id="dl-bar"></div>
-        </div>
-        <div class="dl-stats">
-          <span id="dl-percent">0%</span>
-          <span id="dl-speed">— МБ/с</span>
-          <span id="dl-size">0 / 0 МБ</span>
-        </div>
-        <button class="btn-secondary" id="btn-cancel-download">Отменить</button>
-      </div>
-
-      <!-- Статус: ошибка -->
-      <div id="dl-section-error" hidden>
-        <div class="login-error">
-          <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-          <span id="dl-error-text">Ошибка загрузки</span>
-        </div>
-        <button class="btn-primary" id="btn-retry-download" style="margin-top:12px">Повторить</button>
-      </div>
-
-      <p class="login-card__version" style="margin-top:20px">© 2026 AiNoCraft. · Все права защищены.</p>
-    </div>
-  </div>
-
-
-  <!-- ════════════════════════ ЭКРАН: ГЛАВНАЯ ══════════════════════════════ -->
-  <div id="page-main" class="page" hidden>
-    <div class="main-bg">
-      <img src="../img/background.png" alt="" class="main-bg__img" onerror="this.style.display='none'" />
-      <div class="main-bg__overlay"></div>
-    </div>
-
-    <aside class="sidebar">
-      <div class="sidebar__logo">
-        <img src="../img/logo.png" alt="AiNoCraft" class="sidebar__logo-img" />
-      </div>
-      <nav class="sidebar__nav">
-        <div class="build-list-shell">
-          <p class="build-list-shell__title">Сборки</p>
-          <div id="build-list" class="build-list"></div>
-        </div>
-      </nav>
-      <div class="sidebar__bottom">
-        <button class="nav-item" id="btn-logout" data-tip="Выйти">
-          <svg viewBox="0 0 24 24"><path d="M17 7l-1.4 1.4 2.6 2.6H8v2h10.2l-2.6 2.6L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
-        </button>
+        <article class="settings-card settings-card--danger">
+          <header class="settings-card__head">
+            <span class="settings-card__icon settings-card__icon--danger" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13" /><path d="M10 11v6M14 11v6" /></svg>
+            </span>
+            <h3 class="settings-card__title">Удалить сборку</h3>
+          </header>
+          <div class="settings-card__row settings-card__row--stack">
+            <p class="settings-card__desc">Удалить файлы с устройства</p>
+            <div class="settings-state settings-state--danger-note">
+              <svg class="settings-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3.2l9 16.2H3z" />
+                <path d="M12 8.8v5.2" />
+                <path d="M12 17.2h.01" />
+              </svg>
+              <span class="settings-state__text">Удаляются файлы и кеш загрузки игры</span>
+            </div>
+            <button class="settings-btn settings-btn--danger" type="button" id="btn-delete-build">
+              <svg class="settings-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 7h16" />
+                <path d="M9.5 7V5.4c0-.8.6-1.4 1.4-1.4h2.2c.8 0 1.4.6 1.4 1.4V7" />
+                <path d="M6.4 7l.8 12.2c.1.8.7 1.3 1.5 1.3h6.6c.8 0 1.4-.5 1.5-1.3L17.6 7" />
+                <path d="M10 11v5.5M14 11v5.5" />
+              </svg>
+              <span>Удалить</span>
+            </button>
+          </div>
+          <p class="settings-card__hint settings-card__hint--danger">Аккаунт и прогресс на сервере будут сохранены.</p>
+        </article>
       </div>
     </aside>
 
-    <main class="main-content">
-      <header class="main-header">
-        <div class="main-header__left">
-          <p class="main-header__tag">AiNoCraft Launcher</p>
-          <h1 class="main-header__title">Добро пожаловать, <span id="main-username" class="accent"></span></h1>
-          <p class="main-header__sub">© 2026 AiNoCraft. · Все права защищены.</p>
-        </div>
-        <div id="server-badge" class="status-badge status-badge--ok">
-          <span class="status-dot"></span>
-          <span id="server-badge-text">Сборка не выбрана</span>
+    <aside class="settings-panel builds-panel" id="builds-panel" aria-label="Сборки" aria-hidden="true" inert>
+      <header class="settings-panel__header">
+        <svg class="settings-panel__gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" />
+          <path d="M12 12v9M12 12l8-4.5M12 12L4 7.5" />
+        </svg>
+        <div class="builds-panel__heading">
+          <h2 class="settings-panel__title">Сборки</h2>
+          <p class="builds-panel__subtitle">Выбор сервера</p>
         </div>
       </header>
 
-      <!-- Баннер обновления лаунчера удалён, обновление теперь автоматически при запуске (page-update) -->
+      <div class="settings-panel__scroll" id="build-cards"></div>
+    </aside>
 
-      <section class="main-stage">
-        <section class="launch-card">
-          <div class="launch-card__fx" aria-hidden="true"></div>
-
-          <div class="launch-card__left">
-            <p class="launch-card__label">Запуск игры</p>
-            <div class="play-wrap">
-              <button class="btn-play" id="btn-play" aria-label="Играть">
-                <div class="btn-play__ring"></div>
-                <svg viewBox="0 0 24 24" class="btn-play__icon"><path d="M8 5v14l11-7z"/></svg>
-              </button>
-              <p class="play-label" id="play-label">Нажми чтобы играть</p>
-            </div>
-          </div>
-
-          <div class="launch-divider"></div>
-
-          <div class="right-block">
-            <div class="ram-block">
-              <div class="ram-block__header">
-                <span class="ram-block__title">Оперативная память</span>
-                <span class="ram-block__value accent" id="ram-display">2 ГБ</span>
-              </div>
-              <div class="slider-wrap">
-                <span class="slider-tick">1</span>
-                <input type="range" id="ram-slider" class="slider" min="1" max="16" step="1" value="2" />
-                <span class="slider-tick">16</span>
-              </div>
-              <p class="ram-block__hint">Рекомендуется: 4-8 ГБ для этой сборки</p>
-            </div>
-
-            <button class="btn-integrity" id="btn-check-integrity">
-              <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.6 3.8 10.7 9 12 5.2-1.3 9-6.4 9-12V5l-9-4zm-2 16l-4-4 1.4-1.4L10 14.2l6.6-6.6L18 9l-8 8z"/></svg>
-              Проверить целостность файлов
-            </button>
-          </div>
-        </section>
-      </section>
-
-      <footer class="status-bar">
-        <div id="status-indicator" class="status-indicator status-indicator--idle">
-          <span class="status-dot"></span>
-          <span id="status-text">Готов к запуску</span>
+    <aside class="settings-panel news-panel" id="news-panel" aria-label="Новости" aria-hidden="true" inert>
+      <header class="settings-panel__header">
+        <svg class="settings-panel__gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 5h13v14H6a2 2 0 0 1-2-2V5z" />
+          <path d="M17 8h3v9a2 2 0 0 1-2 2" />
+          <path d="M7 8h7M7 11h7M7 14h5" />
+        </svg>
+        <div class="builds-panel__heading">
+          <h2 class="settings-panel__title">Новости</h2>
+          <p class="builds-panel__subtitle">Обновления сервера</p>
         </div>
-        <span class="status-bar__version">AiNoCraft Launcher</span>
-      </footer>
-    </main>
-  </div>
+      </header>
 
+      <div class="settings-panel__scroll" id="news-list"></div>
+    </aside>
 
-  <!-- Модальное окно загрузки (блокирует весь интерфейс) -->
-  <div id="modal-download" class="modal-overlay modal-overlay--top" hidden>
-    <div class="modal-box modal-box--download">
-      <div class="download-modal__fx" aria-hidden="true"></div>
-
-      <div class="download-modal__header">
-        <div class="download-modal__logo-ring">
-          <img src="../img/logo.png" alt="AiNoCraft" class="download-modal__logo" />
-        </div>
-        <div class="download-modal__heading">
-          <p class="download-modal__tag">AiNoCraft Updater</p>
-          <p class="modal-title" id="modal-download-title">Загрузка сборки</p>
+    <div class="modal-overlay" id="modal-overlay" hidden>
+      <div class="modal" id="modal-confirm" role="dialog" aria-modal="true" hidden>
+        <h3 class="modal__title" id="modal-confirm-title">Подтверждение</h3>
+        <p class="modal__text" id="modal-confirm-text"></p>
+        <div class="modal__actions">
+          <button class="settings-btn" type="button" id="modal-confirm-cancel">Отмена</button>
+          <button class="settings-btn settings-btn--primary" type="button" id="modal-confirm-ok">Да</button>
         </div>
       </div>
 
-      <p class="modal-message" id="modal-download-status">Подключение к серверу...</p>
-
-      <div class="download-modal__progress-wrap">
-        <div class="progress-track">
-          <div class="progress-fill" id="modal-download-bar"></div>
+      <div class="modal" id="modal-alert" role="alertdialog" aria-modal="true" hidden>
+        <h3 class="modal__title" id="modal-alert-title">Ошибка</h3>
+        <p class="modal__text" id="modal-alert-text"></p>
+        <div class="modal__actions">
+          <button class="settings-btn settings-btn--primary" type="button" id="modal-alert-ok">Понятно</button>
         </div>
       </div>
-      <div class="dl-stats dl-stats--modal">
-        <span id="modal-download-percent">0.0%</span>
-        <span id="modal-download-speed">—</span>
-        <span id="modal-download-size"></span>
+
+      <div class="modal modal--loading" id="modal-loading" role="dialog" aria-modal="true" hidden>
+        <span class="modal__spinner" aria-hidden="true"></span>
+        <p class="modal__text" id="modal-loading-text">Загрузка данных...</p>
       </div>
 
-      <div class="modal-actions modal-actions--single">
-        <button class="btn-secondary" id="btn-modal-cancel-download">Отменить</button>
+      <div class="modal modal--progress" id="modal-progress" role="dialog" aria-modal="true" hidden>
+        <h3 class="modal__title" id="modal-progress-title">Загрузка</h3>
+        <p class="modal__text" id="modal-progress-status">Подключение к серверу...</p>
+        <div class="modal__bar">
+          <div class="modal__bar-fill" id="modal-progress-bar"></div>
+        </div>
+        <div class="modal__meta">
+          <span id="modal-progress-percent">0.0%</span>
+          <span id="modal-progress-speed">-</span>
+          <span id="modal-progress-size"></span>
+        </div>
+        <div class="modal__actions">
+          <button class="settings-btn" type="button" id="modal-progress-cancel">Отменить</button>
+        </div>
       </div>
     </div>
-  </div>
+  </main>
 
-  <!-- Модальное окно подтверждения -->
-  <div id="modal-confirm" class="modal-overlay" hidden>
-    <div class="modal-box">
-      <p class="modal-title">Подтвердите действие</p>
-      <p class="modal-message" id="modal-message"></p>
-      <div class="modal-actions">
-        <button class="btn-secondary" id="modal-cancel-btn">Отмена</button>
-        <button class="btn-primary" id="modal-ok-btn">Подтвердить</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Скрипты — порядок важен -->
   <script src="./js/api.js"></script>
-  <script src="./js/login.js"></script>
-  <script src="./js/download.js"></script>
-  <script src="./js/main.js"></script>
-  <script src="./js/updater.js"></script>
+  <script src="./js/modals.js"></script>
+  <script src="./js/shell.js"></script>
+  <script src="./js/auth.js"></script>
+  <script src="./js/home.js"></script>
+  <script src="./js/builds.js"></script>
+  <script src="./js/settings.js"></script>
+  <script src="./js/news.js"></script>
   <script src="./js/app.js"></script>
-
 </body>
 </html>
